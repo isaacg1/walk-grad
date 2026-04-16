@@ -193,10 +193,10 @@ if __name__ == "__main__":
     # The three bugs, to mix stuff up.
     # I think that 000, 111, and 011 look nice. What do you think?
     flip_first = 0
-    flip_second = 1
-    flip_diff = 1
+    flip_second = 0
+    flip_diff = 0
     # The random seed. Changing this gives another artwork in the same style
-    seed = 1
+    seed = 0
     # The filename of the resulting arwork is based on these parameters.
     # If you change how your program works but keep the parameters the same,
     # move your artwork to a different filename so it isn't overwritten.
