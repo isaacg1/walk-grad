@@ -208,7 +208,7 @@ fn main() {
         .expect("seed present")
         .parse()
         .expect("seed num");
-    for bug in 0..15 {
+    for bug in 0..16 {
         let filename = format!("img-{size}-{length_alpha}-{bug}-{seed}.png");
         println!("{filename}");
         let image = run(size, length_alpha, bug, seed);
