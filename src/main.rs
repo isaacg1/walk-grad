@@ -216,15 +216,23 @@ fn main() {
         .expect("alpha present")
         .parse()
         .expect("alpha num");
-    let seed = env::args()
+    let bug: u8 = env::args()
         .nth(3)
+        .expect("bug present")
+        .parse()
+        .expect("bug num");
+    assert!(bug < 8);
+    let seed: u64 = env::args()
+        .nth(4)
         .expect("seed present")
         .parse()
         .expect("seed num");
-    for bug in 0..8 {
-        let filename = format!("img-{size}-{length_alpha}-{bug}-{seed}.png");
-        println!("{filename}");
-        let image = run(size, length_alpha, bug, seed);
-        image.save(filename).expect("Saved");
+    for seed in 0..10 {
+        for bug in 0..8 {
+            let filename = format!("img-{size}-{length_alpha}-{bug}-{seed}.png");
+            println!("{filename}");
+            let image = run(size, length_alpha, bug, seed);
+            image.save(filename).expect("Saved");
+        }
     }
 }
