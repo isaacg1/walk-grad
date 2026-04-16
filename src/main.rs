@@ -1,41 +1,20 @@
-use hashbrown::{DefaultHashBuilder, HashTable};
 use image::{ImageBuffer, RgbImage};
 use rand::prelude::*;
 use std::collections::HashSet;
 use std::env;
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::{BuildHasherDefault, BuildHasher, Hash, DefaultHasher};
+use std::f64::consts::PI;
 
-fn remove_random<T, R>(set: &mut HashTable<T>, rng: &mut R) -> Option<T>
+fn remove_random_hashset<T, K>(set: &mut HashSet<T, K>) -> Option<T>
 where
-    R: Rng,
-    T: Eq + PartialEq + Hash,
+    T: Eq + PartialEq + Hash + Copy,
+    K: BuildHasher
 {
     if set.is_empty() {
         return None;
     }
-    // If load factor is under 25%, shrink to fit.
-    // We need a high load factor to ensure that the sampling succeeds in a reasonable time,
-    // and the table doesn't rebalance on removals.
-    // Insertions can only cause the load factor to reach as low as 50%,
-    // so it's safe to shrink at 25%.
-    let hasher = DefaultHashBuilder::default();
-    let hasher = |val: &_| hasher.hash_one(val);
-    if set.capacity() >= 8 && set.len() < set.capacity() / 4 {
-        set.shrink_to_fit(hasher);
-    }
-    let num_buckets = set.num_buckets();
-    // Perform rejection sampling: Pick a random bucket, check if it's full,
-    // repeat until a full bucket is found.
-    loop {
-        let bucket_index = rng.random_range(0..num_buckets);
-        let out = set
-            .get_bucket_entry(bucket_index)
-            .ok()
-            .map(|occupied| occupied.remove().0);
-        if out.is_some() {
-            return out;
-        }
-    }
+    let first = *set.iter().next().expect("Nonempty");
+    set.take(&first)
 }
 
 type BaseColor = [f64; 3];
@@ -79,21 +58,15 @@ const DEBUG: bool = false;
 fn run(size: usize, length_alpha: f64, bug: u8, seed: u64) -> RgbImage {
     let mut rng = StdRng::seed_from_u64(seed);
     let mut grid: Vec<Vec<Option<BaseColor>>> = vec![vec![None; size]; size];
-    let mut blank: HashTable<Location> = HashTable::new();
-    let hasher = |val: &Location| {
-        let mut hasher = std::hash::DefaultHasher::default();
-        hasher.write_usize(val[0]);
-        hasher.write_usize(val[1]);
-        hasher.finish()
-    };
+    let mut blank = HashSet::with_hasher(BuildHasherDefault::<DefaultHasher>::new());
     for i in 0..size {
         for j in 0..size {
             let val = [i, j];
-            blank.insert_unique(hasher(&val), val, hasher);
+            blank.insert(val);
         }
     }
     let walk_length_cap = (size as f64).powf(length_alpha) as usize;
-    'outer: while let Some(start) = remove_random(&mut blank, &mut rng) {
+    'outer: while let Some(start) = remove_random_hashset(&mut blank) {
         if grid[start[0]][start[1]].is_some() {
             continue;
         }
@@ -138,10 +111,7 @@ fn run(size: usize, length_alpha: f64, bug: u8, seed: u64) -> RgbImage {
                 }
                 assert!(grid[last[0]][last[1]].is_none());
                 grid[last[0]][last[1]] = Some([rng.random(), rng.random(), rng.random()]);
-                blank
-                    .find_entry(hasher(last), |val| val == last)
-                    .ok()
-                    .map(|occupied| occupied.remove());
+                blank.remove(last);
             }
         }
         let last1 = walks[0].0.last().expect("Nonempty 1");
@@ -168,10 +138,13 @@ fn run(size: usize, length_alpha: f64, bug: u8, seed: u64) -> RgbImage {
             }
             assert!(grid[location[0]][location[1]].is_none());
             grid[location[0]][location[1]] = Some(color);
+            blank.remove(location);
+            /*
             blank
                 .find_entry(hasher(location), |val| val == location)
                 .ok()
                 .map(|occupied| occupied.remove());
+                */
         }
         for (i, location) in walks[1].0[..walks[1].0.len() - 1]
             .iter()
@@ -189,16 +162,24 @@ fn run(size: usize, length_alpha: f64, bug: u8, seed: u64) -> RgbImage {
             }
             assert!(grid[location[0]][location[1]].is_none());
             grid[location[0]][location[1]] = Some(color);
+            blank.remove(location);
+            /*
             blank
                 .find_entry(hasher(location), |val| val == location)
                 .ok()
                 .map(|occupied| occupied.remove());
+                */
         }
     }
     let mut img: RgbImage = ImageBuffer::new(size as u32, size as u32);
     for (i, row) in grid.into_iter().enumerate() {
         for (j, cell) in row.into_iter().enumerate() {
-            let color = cell.unwrap_or([0.5; 3]).map(|f| (f * 255.999999) as u8);
+            let color = cell.unwrap_or([0.5; 3]).map(|f| 
+            if bug & 8 == 0 {
+                (f * 256.0) as u8
+            } else {
+                (((PI*(f - 0.5)).atan()/PI + 0.5) * 256.0) as u8
+            });
             img.put_pixel(i as u32, j as u32, image::Rgb(color));
         }
     }
@@ -227,12 +208,10 @@ fn main() {
         .expect("seed present")
         .parse()
         .expect("seed num");
-    for seed in 0..10 {
-        for bug in 0..8 {
-            let filename = format!("img-{size}-{length_alpha}-{bug}-{seed}.png");
-            println!("{filename}");
-            let image = run(size, length_alpha, bug, seed);
-            image.save(filename).expect("Saved");
-        }
+    for bug in 0..15 {
+        let filename = format!("img-{size}-{length_alpha}-{bug}-{seed}.png");
+        println!("{filename}");
+        let image = run(size, length_alpha, bug, seed);
+        image.save(filename).expect("Saved");
     }
 }
